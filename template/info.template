@@ -1,0 +1,40 @@
+<%
+import re
+from table import Table
+from template_param import TemplateParam
+%>\
+
+% for table in TABLE_LIST:
+<%
+    print("table name:", table.name)
+    replace_str = "t_org_"
+    if table.name == "t_organization":
+        replace_str = "t_"
+
+    class_name = TemplateParam.get_camel_style_name( table.name.lstrip(replace_str) ) # info类名
+    class_comment = table.comment
+%>\
+class ${class_name}Info:
+    info(comment="${class_comment}")
+    % for field in table.fields:
+<%
+        if field.name in ["F_org_code", "F_id", "F_deleted", "F_operator", "F_create_time", "F_modify_time"]:
+            continue
+        param_name = field.name.lstrip("F_")
+        param_type = ""
+        param_comment = field.comment
+        if "tinyint" in field.data_type or "int" in field.data_type:
+            param_type = "int"
+        if "bigint" in field.data_type:
+            param_type = "int64_t"
+        if "varchar" in field.data_type:
+            param_type = "string"
+        if "text" in field.data_type:
+            param_type = "string"
+        else:
+            param_type = "string"
+%>\
+    param(name="${param_name}",  type="${param_type}",  min="MIN",  max="MAX", comment=u"${field.comment}"),
+    % endfor
+
+% endfor

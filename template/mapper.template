@@ -1,0 +1,417 @@
+<%
+import re
+from template_param import TemplateParam
+table = TEMPLATE_PARAM
+class_model_file = table.name+""
+class_dto_file   = table.name+"_dto"
+class_model_name = "Tbl" + TemplateParam.get_camel_style_name( table.name.lstrip("t_") )
+class_dto_name   = "Tbl"+TemplateParam.get_camel_style_name( table.name.lstrip("t_") )+"Dto"
+class_name = "Tbl"+TemplateParam.get_camel_style_name( table.name.lstrip("t_") )+"Mapper"
+unique_column_list = [] # 唯一索引字段
+for node in table.index_dict.values():
+    if node.unique_flag and "F_id" not in node.column_name_list:
+        for column in node.column_name_list:
+            unique_column_list.append(column)
+endif
+endfor
+%>
+# -*- coding: utf-8 -*-
+import time
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from common.pagination import exec_pagination
+from common.mep_utils import parse_sort_list
+from app.model.dbs.${class_model_file} import *
+from app.model.dbs.${class_dto_file} import *
+
+class ${class_name}:
+    '''
+    ${table.comment}
+    '''
+
+    @staticmethod
+    def query_by_pk(obj: ${class_dto_name}, for_update: bool = True):
+        if not obj.is_set_id():
+            raise Exception("id is None!")
+
+        tbl_set = None
+        if for_update:
+            tbl_set =  ${class_model_name}.objects.select_for_update().filter(id = id).first()
+        else:
+            tbl_set =  ${class_model_name}.objects.filter(id = id).first()
+
+% for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+        obj.set_${var_name}( tbl_set.${var_name} )
+%endfor
+
+
+    @staticmethod
+    def delete_by_pk(obj: ${class_dto_name}):
+        if not obj.is_set_id():
+            raise Exception("id is None!")
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+        tbl_set =  ${class_model_name}.objects.select_for_update().filter( id = obj.id ).first()
+        if not tbl_set:
+            raise Exception( "id:{}数据库记录不存在".format(obj.id) )
+
+        tbl_set.operator = obj.get_operator()
+        tbl_set.modify_time = int(time.time())
+        tbl_set.delete()
+
+    @staticmethod
+    def update_by_pk(obj: ${class_dto_name}):
+        if not obj.is_set_id():
+            raise Exception("id is None!")
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+        tbl_set =  ${class_model_name}.objects.select_for_update().filter( id = obj.id ).first()
+        if not tbl_set:
+            raise Exception( "id:{}数据库记录不存在!".format(obj.id) )
+
+% for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+    %if field.name not in unique_column_list and field.name != "F_id":
+        if obj.is_set_${var_name}():
+            tbl_set.${var_name} = obj.get_${var_name}()
+    %endif
+%endfor
+
+        tbl_set.modify_time = int( time.time() )
+        tbl_set.save()
+
+<%
+# 单条创建
+%>\
+
+    @staticmethod
+    def create(obj: ${class_dto_name}):
+% if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+% endif
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+% for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        if not obj.is_set_${var_name}():
+            raise Exception("${var_name} is None!")
+% endfor
+
+        condition_dict = {}
+% for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+    %if field.name != "F_id":
+        if obj.is_set_${var_name}():
+            condition_dict["${var_name}"] = obj.get_${var_name}()
+    %endif
+%endfor
+        condition_dict["create_time"] = int(time.time())
+        condition_dict["modify_time"] = int(time.time())
+        ${class_model_name}.objects.create( **condition_dict )
+
+<%
+# 逻辑主键更新
+%>\
+%if unique_column_list:
+    @staticmethod
+    def update(obj: ${class_dto_name}):
+    % if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+    % endif
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        if not obj.is_set_${var_name}():
+            raise Exception("${var_name} is None!")
+
+    % endfor
+
+        tbl_set =  ${class_model_name}()
+        condition_dict = {}
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        condition_dict["${var_name}"] = obj.get_${var_name}()
+    % endfor
+
+        tbl_set = ${class_model_name}.objects.select_for_update().filter(**condition_dict).first()
+        if not tbl_set:
+            raise Exception( "{}数据库记录不存在!".format(**condition_dict) )
+
+    % for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+        %if field.name not in unique_column_list and field.name != "F_id":
+        if obj.is_set_${var_name}():
+            tbl_set.${var_name} = obj.get_${var_name}()
+        %endif
+%endfor
+
+        tbl_set.modify_time = int(time.time())
+        tbl_set.save()
+% endif
+
+<%
+# 逻辑主键查询
+%>\
+%if unique_column_list:
+    @staticmethod
+    def query(obj: ${class_dto_name}, for_update: bool = True):
+    % if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+    % endif
+
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        if not obj.is_set_${var_name}():
+            raise Exception("${var_name} is None!")
+
+    % endfor
+
+        tbl_set =  ${class_model_name}()
+        condition_dict = {}
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        condition_dict["${var_name}"] = obj.get_${var_name}()
+    % endfor
+
+        if for_update:
+            tbl_set = ${class_model_name}.objects.select_for_update().filter(**condition_dict).first()
+        else:
+            tbl_set = ${class_model_name}.objects.filter(**condition_dict).first()
+
+    % for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+        obj.set_${var_name}( tbl_set.${var_name} )
+    %endfor
+
+<%
+# 逻辑主键删除
+%>\
+%if unique_column_list:
+    @staticmethod
+    def delete(obj: ${class_dto_name}):
+    % if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+    % endif
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        if not obj.is_set_${var_name}():
+            raise Exception("${var_name} is None!")
+
+    % endfor
+
+        tbl_set =  ${class_model_name}()
+        condition_dict = {}
+    % for unique_column in unique_column_list:
+<%
+        var_name = unique_column.replace("F_", "")
+%>\
+        condition_dict["${var_name}"] = obj.get_${var_name}()
+    % endfor
+
+        tbl_set = ${class_model_name}.objects.select_for_update().filter(**condition_dict).first()
+        if not tbl_set:
+            raise Exception( "{}数据库记录不存在!".format(**condition_dict) )
+
+        tbl_set.operator = obj.get_operator()
+        tbl_set.modify_time = int(time.time())
+        tbl_set.delete()
+% endif
+
+% endif
+<%
+# 批量更新
+%>\
+    @staticmethod
+    def bulk_create(obj_list):
+        tbl_set_list = []
+        for obj in obj_list:
+            % if "F_org_code" in unique_column_list:
+            if not obj.get_org_code():
+                raise Exception("org_code value is empty!")
+            % endif
+
+            if not obj.get_operator():
+                raise Exception("operator is None!")
+
+            tbl_set = ${class_model_name}()
+            % for field in table.fields:
+            <%
+            var_name = field.name.lstrip("F_")
+            %>
+            if obj.is_set_${var_name}():
+                tbl_set.${var_name} = obj.get_${var_name}()
+            % endfor
+            tbl_set.create_time = int(time.time())
+            tbl_set.modify_time = int(time.time())
+
+            tbl_set_list.append(tbl_set)
+
+        ${class_model_name}.objects.bulk_create(tbl_set_list, batch_size=100)
+
+<%
+# 批量更新
+%>\
+    @staticmethod
+    def bulk_update(obj_list, fields=[]):
+        tbl_set_list = []
+        for obj in obj_list:
+            % if "F_org_code" in unique_column_list:
+            if not obj.get_org_code():
+                raise Exception("org_code value is empty!")
+            % endif
+
+            if not obj.get_operator():
+                raise Exception("operator is None!")
+
+            tbl_set = ${class_model_name}()
+            % for field in table.fields:
+            <%
+            var_name = field.name.lstrip("F_")
+            %>
+            if obj.is_set_${var_name}():
+                tbl_set.${var_name} = obj.get_${var_name}()
+            % endfor
+            tbl_set.modify_time = int(time.time())
+
+            tbl_set_list.append(tbl_set)
+
+        if fields:
+            ${class_model_name}.objects.bulk_update(tbl_set_list, fields=fields, batch_size=100)
+        else:
+            ${class_model_name}.objects.bulk_update(tbl_set_list, batch_size=100)
+
+
+
+<%
+# 批量查询
+%>\
+    @staticmethod
+    def bulk_query(obj: ${class_dto_name}, for_update: bool = True, page=-1, page_size=-1, sort_list=[]):
+    % if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+    % endif
+
+        condition_dict = {}
+% for field in table.fields:
+<%
+        var_name = field.name.lstrip("F_")
+%>\
+        if obj.is_set_${var_name}():
+            condition_dict["${var_name}"] = obj.get_${var_name}()
+        elif obj.is_set_${var_name}_in():
+            condition_dict["${var_name}__in"] = obj.get_${var_name}_in()
+        elif obj.is_set_${var_name}_like():
+            condition_dict["${var_name}__contains"] = obj.get_${var_name}_like()
+        elif obj.is_set_${var_name}_gte():
+            condition_dict["${var_name}__gte"] = obj.get_${var_name}_gte()
+        elif obj.is_set_${var_name}_lte():
+            condition_dict["${var_name}__lte"] = obj.get_${var_name}_lte()
+
+ % endfor
+
+        tbl_set = None
+        if for_update:
+            tbl_set = ${class_model_name}.objects.select_for_update().filter(**condition_dict)
+        else:
+            tbl_set = ${class_model_name}.objects.filter(**condition_dict)
+
+        # 拼装排序参数
+        sort_param = []
+        if len(sort_list):
+            sort_param = parse_sort_list(sort_list)
+
+        # 分页
+        record_result = exec_pagination(tbl_set, page=page, rows=page_size, ordering=sort_param)
+
+        result_list = []
+        for tbl_record in record_result.data_list:
+            result =  ${class_dto_name}()
+% for field in table.fields:
+<%
+            var_name = field.name.lstrip("F_")
+%>\
+            result.set_${var_name}( tbl_record.${var_name} )
+%endfor
+
+            result_list.append( result )
+
+        return result_list,record_result.page_info.total_rows
+
+
+
+<%
+# 批量查询
+%>\
+    @staticmethod
+    def bulk_delete(obj: ${class_dto_name}):
+        % if "F_org_code" in unique_column_list:
+        if not obj.get_org_code():
+            raise Exception("org_code value is empty!")
+        % endif
+
+        if not obj.get_operator():
+            raise Exception("operator is None!")
+
+        condition_dict = {}
+        % for field in table.fields:
+        <%
+        var_name = field.name.lstrip("F_")
+        %>
+    % if field.name != "F_operator":
+        if obj.is_set_${var_name}():
+            condition_dict["${var_name}"] = obj.get_${var_name}()
+        elif obj.is_set_${var_name}_in():
+            condition_dict["${var_name}__in"] = obj.get_${var_name}_in()
+        elif obj.is_set_${var_name}_like():
+            condition_dict["${var_name}__contains"] = obj.get_${var_name}_like()
+        elif obj.is_set_${var_name}_gte():
+            condition_dict["${var_name}__gte"] = obj.get_${var_name}_gte()
+        elif obj.is_set_${var_name}_lte():
+            condition_dict["${var_name}__lte"] = obj.get_${var_name}_lte()
+    % endif
+
+ % endfor
+
+        ${class_model_name}.objects.select_for_update().filter(**condition_dict).delete(obj.get_operator())

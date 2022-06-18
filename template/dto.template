@@ -1,0 +1,130 @@
+<%
+import re
+from template_param import TemplateParam
+table = TEMPLATE_PARAM
+class_name = "Tbl"+TemplateParam.get_camel_style_name( table.name.lstrip("t_") )+"Dto"
+%>
+# -*- coding: utf-8 -*-
+
+class ${class_name}:
+    '''
+    ${table.comment}
+    '''
+    def __init__(self):
+% for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+        self._${var_name} = None  # ${field.comment}
+        self._${var_name}_u = 0
+        self._${var_name}_in = [] # ${field.comment}
+        self._${var_name}_in_u = 0
+        self._${var_name}_like = None # ${field.comment}
+        self._${var_name}_like_u = 0
+        self._${var_name}_gte = None # ${field.comment}
+        self._${var_name}_gte_u = 0
+        self._${var_name}_lte = None # ${field.comment}
+        self._${var_name}_lte_u = 0
+% endfor
+
+
+% for field in table.fields:
+<%
+    var_name = field.name.lstrip("F_")
+%>\
+    def get_${var_name}(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}
+
+    def get_${var_name}_in(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_in
+
+    def get_${var_name}_like(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_like
+
+    def get_${var_name}_gte(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_gte
+
+    def get_${var_name}_lte(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_gte
+
+    def set_${var_name}(self, value):
+        '''
+        ${field.comment}
+        '''
+        self._${var_name} = value
+        self._${var_name}_u = 1
+
+    def set_${var_name}_in(self, value):
+        '''
+        ${field.comment}
+        '''
+        self._${var_name}_in = value
+        self._${var_name}_in_u = 1
+
+    def set_${var_name}_like(self, value):
+        '''
+        ${field.comment}
+        '''
+        self._${var_name}_like = value
+        self._${var_name}_like_u = 1
+
+    def set_${var_name}_gte(self, value):
+        '''
+        ${field.comment}
+        '''
+        self._${var_name}_gte = value
+        self._${var_name}_gte_u = 1
+
+    def set_${var_name}_lte(self, value):
+        '''
+        ${field.comment}
+        '''
+        self._${var_name}_lte = value
+        self._${var_name}_lte_u = 1
+
+    def is_set_${var_name}(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_u == 1
+
+    def is_set_${var_name}_in(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_in_u == 1
+
+    def is_set_${var_name}_like(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_like_u == 1
+
+    def is_set_${var_name}_gte(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_gte_u == 1
+
+    def is_set_${var_name}_lte(self):
+        '''
+        ${field.comment}
+        '''
+        return self._${var_name}_lte_u == 1
+    
+% endfor

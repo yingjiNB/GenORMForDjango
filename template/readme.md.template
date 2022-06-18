@@ -1,0 +1,42 @@
+<%
+from table import Table
+from template_param import TemplateParam
+%>\
+# 					测试数据库设计
+<%
+table_seq = 0
+%>\
+% for table in TABLE_LIST:
+<%
+	table_seq += 1
+	HEAD = "##"
+%>\
+${HEAD} ${table_seq}.${table.comment}(${table.name})
+
+
+| 代码 | 数据类型 | 主键 | 备注 | 默认值 |
+| - | - | - | - | - |
+	% for field in table.fields:
+<%
+	pk = ""
+	if field.is_pk:
+		pk = "Y"
+%>\
+| ${field.name}|${field.data_type}|${pk}|${field.comment}|${field.default}|
+	% endfor
+
+	% for node in table.index_dict.values():
+<%
+		HEAD = "普通索引"
+		if node.unique_flag:
+			HEAD = "唯一索引"
+
+		column_str = ','.join( node.column_name_list )
+%>\
+
+${HEAD}:  ${column_str}
+	% endfor
+
+
+
+% endfor

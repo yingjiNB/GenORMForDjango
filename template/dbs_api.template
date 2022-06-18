@@ -1,0 +1,173 @@
+<%
+import re
+from template_param import TemplateParam
+TABLE_NAME = TEMPLATE_PARAM.name    # 表名
+TABLE_COMMENT = TEMPLATE_PARAM.comment
+FIELDS = TEMPLATE_PARAM.fields
+MODEL_NAME = TEMPLATE_PARAM.name.lstrip("t_")
+CLASS_NAME = "tbl_" + MODEL_NAME #类名
+UNIQUE_INDEX = TEMPLATE_PARAM.unique_index
+print(TABLE_NAME)
+%>
+import enum
+from django.db import models
+from app.model.dbs.model import SoftModel
+% if TABLE_NAME == "t_org_customer" or TABLE_NAME == "t_org_so":
+from common.id_generator import gen_id
+% endif
+
+%for field in FIELDS:
+    %if "enum" in field.comment:
+<%
+        FIELD_DATA_TYPE_RES = re.findall(r"(.*?)\((\d+)\)",field.data_type)
+        FIELD_VAR_NAME = field.name.replace("F_","")
+        ENUM_CLASS_NAME = TemplateParam.get_camel_style_name(CLASS_NAME+"_"+FIELD_VAR_NAME) + "Enum"
+        ENUM_KEY_PRE    = FIELD_VAR_NAME.upper() # 枚举前缀
+        ENUM_LIST = field.comment.split("enum:")[1].split("|")
+        IS_INT = False
+        if FIELD_DATA_TYPE_RES[0][0] in ["tinyint","int", "bigint"] and FIELD_DATA_TYPE_RES[0][1] != "1":
+            IS_INT = True
+%>\
+class ${ENUM_CLASS_NAME}(enum.Enum):
+    '''
+    ${field.comment.split("enum:")[0]}
+    '''
+        % for node in ENUM_LIST:
+<%
+            ENUM_NODE_INFO_LIST = node.split(",")
+            ENUM_KEY_NAME = ENUM_KEY_PRE+"_"+ENUM_NODE_INFO_LIST[1].upper()
+%>\
+            %if IS_INT:
+    ${ENUM_KEY_NAME} = ${ENUM_NODE_INFO_LIST[0]} # ${ENUM_NODE_INFO_LIST[2]}
+            %else:
+    ${ENUM_KEY_NAME} = "${ENUM_NODE_INFO_LIST[0]}" # ${ENUM_NODE_INFO_LIST[2]}
+            %endif
+        % endfor
+
+    @classmethod
+        % if IS_INT:
+    def get_desc(cls, enum_value: int):
+        % else:
+    def get_desc(cls, enum_value: str):
+        % endif
+        '''
+        获取${field.comment.split("enum:")[0]}值描述
+        '''
+        desc_dict = {
+        % for node in ENUM_LIST:
+<%
+            ENUM_NODE_INFO_LIST = node.split(",")
+            ENUM_KEY_NAME = ENUM_KEY_PRE+"_"+ENUM_NODE_INFO_LIST[1].upper()
+%>\
+            %if IS_INT:
+            ${ENUM_NODE_INFO_LIST[0]}:"${ENUM_NODE_INFO_LIST[2]}",
+            %else:
+            "${ENUM_NODE_INFO_LIST[0]}":"${ENUM_NODE_INFO_LIST[2]}",
+            %endif
+        % endfor
+        }
+
+        return desc_dict.get(enum_value, "未知状态")
+    %endif
+%endfor
+
+
+class ${TemplateParam.get_camel_style_name(CLASS_NAME)}(SoftModel):
+%for field in FIELDS:
+    %if "enum" in field.comment:
+<%
+        FIELD_DATA_TYPE_RES = re.findall(r"(.*?)\((\d+)\)",field.data_type)
+        FIELD_VAR_NAME = field.name.replace("F_","")
+        TUB_NAME = FIELD_VAR_NAME.upper()+"_TUB" # 元组名
+        ENUM_KEY_PRE    = FIELD_VAR_NAME.upper() # 枚举前缀
+        ENUM_LIST = field.comment.split("enum:")[1].split("|")
+        IS_INT = False
+        if FIELD_DATA_TYPE_RES[0][0] in ["tinyint","int", "bigint"] and FIELD_DATA_TYPE_RES[0][1] != "1":
+            IS_INT = True
+%>\
+    # ${field.comment.split("enum:")[0]}元组
+    ${TUB_NAME} = (
+        % for node in ENUM_LIST:
+<%
+            ENUM_NODE_INFO_LIST = node.split(",")
+            ENUM_KEY_NAME = ENUM_KEY_PRE+"_"+ENUM_NODE_INFO_LIST[1].upper()
+%>\
+            %if IS_INT:
+        (${ENUM_NODE_INFO_LIST[0]}, "${ENUM_NODE_INFO_LIST[2]}"),
+            %else:
+        ("${ENUM_NODE_INFO_LIST[0]}", "${ENUM_NODE_INFO_LIST[2]}"),
+            %endif
+        % endfor
+    )
+
+    %endif
+%endfor
+% for field in FIELDS:
+<%
+    FIELD_NAME = field.name     # 字段名
+    FIELD_VAR_NAME = FIELD_NAME.replace("F_","")
+    FIELD_DATA_TYPE = field.data_type    # 字段类型
+    FIELD_DEFAULT = field.default # 字段默认值
+    IS_PK = field.is_pk # 是否为主键
+    FIELD_COMMENT = field.comment   # 字段注解
+    FIELD_DATA_TYPE_RES = re.findall(r"(.*?)\((\d+)\)",FIELD_DATA_TYPE)
+
+    # 设置枚举值元组字符串
+    CHOICES_STR = ""
+    TUB_NAME = FIELD_VAR_NAME.upper()+"_TUB" # 元组名
+    if "enum" in field.comment:
+        CHOICES_STR = "choices="+TUB_NAME+", "
+%>\
+%if FIELD_DATA_TYPE_RES != []:
+    % if IS_PK:
+    ${FIELD_VAR_NAME} = models.AutoField(primary_key=True,null=False, db_column="${FIELD_NAME}")
+<%continue%>
+    % endif
+    % if FIELD_DATA_TYPE_RES[0][0] in ["tinyint","int"] and FIELD_DATA_TYPE_RES[0][1] == "1":
+    ${FIELD_VAR_NAME} = models.BooleanField(default=False, help_text="${FIELD_COMMENT}", verbose_name="${FIELD_COMMENT}", default=${FIELD_DEFAULT})
+<%continue%>
+    % elif FIELD_DATA_TYPE_RES[0][0] in ["tinyint","int"] and FIELD_DATA_TYPE_RES[0][1] != "1":
+    ${FIELD_VAR_NAME} = models.IntegerField(${CHOICES_STR}db_column="${FIELD_NAME}", help_text="${FIELD_COMMENT}", verbose_name="${FIELD_COMMENT}", default=${FIELD_DEFAULT})
+<%continue%>
+    % endif
+    % if FIELD_DATA_TYPE_RES[0][0] in ["varchar"]:
+    ${FIELD_VAR_NAME} = models.CharField(${CHOICES_STR}max_length=${FIELD_DATA_TYPE_RES[0][1]}, db_column="${FIELD_NAME}", help_text="${FIELD_COMMENT}", verbose_name="${FIELD_COMMENT}", default='${FIELD_DEFAULT}')
+<%continue%>
+    % endif
+    % if FIELD_DATA_TYPE_RES[0][0] in ["bigint"]:
+    ${FIELD_VAR_NAME} = models.BigIntegerField(${CHOICES_STR}db_column="${FIELD_NAME}", help_text="${FIELD_COMMENT}", verbose_name="${FIELD_COMMENT}",  default=${FIELD_DEFAULT})
+<%continue%>
+    % endif
+%else:
+    % if FIELD_DATA_TYPE == "text":
+    ${FIELD_VAR_NAME} = models.TextField(db_column="${FIELD_NAME}", help_text="${FIELD_COMMENT}", verbose_name="${FIELD_COMMENT}", default='[]')
+    % endif
+% endif
+%endfor
+
+
+% for field in FIELDS:
+<%
+    FIELD_NAME = field.name     # 字段名
+    FIELD_VAR_NAME = FIELD_NAME.replace("F_","")
+%>\
+    ${FIELD_VAR_NAME.upper()} = "${FIELD_VAR_NAME}" # ${field.comment} 字段别名
+% endfor
+
+    ALL_COLUMNS = [
+% for field in FIELDS:
+<%
+    FIELD_NAME = field.name     # 字段名
+    FIELD_VAR_NAME = FIELD_NAME.replace("F_","")
+%>\
+%if FIELD_VAR_NAME not in UNIQUE_INDEX and FIELD_VAR_NAME not in ["id", "create_time"]:
+        "${FIELD_VAR_NAME}",
+%endif
+% endfor
+    ]
+
+    class Meta:
+        db_table = "${TABLE_NAME}"
+        verbose_name = "${TABLE_COMMENT}"
+        verbose_name_plural = verbose_name
+        unique_together = ${UNIQUE_INDEX}

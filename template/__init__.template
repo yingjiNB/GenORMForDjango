@@ -1,0 +1,18 @@
+<%
+    from config import IMPORT_INIT_PATH
+    # 根据字母排序
+    TABLE_NAMES = sorted(TEMPLATE_PARAM.name, key=lambda i: i)
+%>
+# -*- coding: utf-8 -*-
+
+% for idx, name in  enumerate(TABLE_NAMES):
+${IMPORT_INIT_PATH}${name[0]} import *  # ${idx+1}.${name[1]}
+%endfor
+
+% for idx, name in  enumerate(TABLE_NAMES):
+${IMPORT_INIT_PATH}${name[0]}_dto import *  # ${idx+1}.${name[1]}
+%endfor
+
+% for idx, name in  enumerate(TABLE_NAMES):
+${IMPORT_INIT_PATH}${name[0]}_mapper import *  # ${idx+1}.${name[1]}
+%endfor
